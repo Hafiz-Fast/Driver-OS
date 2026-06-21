@@ -22,15 +22,10 @@ class SignupView(APIView):
             email=serializer.validated_data['email'],
             password=serializer.validated_data['password'],
         )
-        tokens = RefreshToken.for_user(user)
 
         return Response(
             {
                 'user': build_user_payload(user),
-                'tokens': {
-                    'access': str(tokens.access_token),
-                    'refresh': str(tokens),
-                },
             },
             status=status.HTTP_201_CREATED,
         )
