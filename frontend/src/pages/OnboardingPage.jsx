@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, Car, CheckCircle2 } from 'lucide-react';
 import { createCar } from '../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -75,7 +76,7 @@ function OnboardingPage() {
         {/* Step 0: Welcome */}
         {step === 0 && (
           <>
-            <span className="welcome-emoji">🚗</span>
+            <span className="welcome-emoji"><Car size={48} /></span>
             <h1>Welcome{user ? `, ${user.username}` : ''}!</h1>
             <p className="onboarding-subtitle">
               Let's set up your first vehicle so your dashboard is ready to go.
@@ -86,7 +87,8 @@ function OnboardingPage() {
                 Skip for now
               </button>
               <button className="btn btn-primary btn-lg" onClick={() => setStep(1)}>
-                Add my car →
+                Add my car
+                <ArrowRight size={18} />
               </button>
             </div>
           </>
@@ -183,10 +185,11 @@ function OnboardingPage() {
 
               <div className="onboarding-actions">
                 <button type="button" className="btn btn-ghost" onClick={() => setStep(0)}>
-                  ← Back
+                  <ArrowLeft size={17} />
+                  Back
                 </button>
                 <button className="btn btn-primary btn-lg" type="submit" disabled={loading}>
-                  {loading ? 'Adding…' : 'Add Vehicle'}
+                  {loading ? 'Adding...' : 'Add Vehicle'}
                 </button>
               </div>
             </form>
@@ -196,7 +199,7 @@ function OnboardingPage() {
         {/* Step 2: Done */}
         {step === 2 && (
           <>
-            <span className="welcome-emoji">✅</span>
+            <span className="welcome-emoji success"><CheckCircle2 size={50} /></span>
             <h1>You're all set!</h1>
             <p className="onboarding-subtitle">
               Your vehicle has been added. Head to your dashboard to see everything in action.
@@ -204,7 +207,8 @@ function OnboardingPage() {
             <div className="onboarding-actions">
               <div />
               <button className="btn btn-primary btn-lg" onClick={handleFinish}>
-                Go to Dashboard →
+                Go to Dashboard
+                <ArrowRight size={18} />
               </button>
             </div>
           </>

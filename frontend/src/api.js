@@ -148,3 +148,62 @@ export async function logSafetyEvent({ sessionId, earValue, eventType = 'drowsin
   if (!res.ok) throw data;
   return data;
 }
+
+/* --- driver services --- */
+export async function getDriverServiceSummary(carId = '') {
+  const query = carId ? `?car_id=${carId}` : '';
+  const res = await apiFetch(`/driver-services/summary/${query}`);
+  if (!res || !res.ok) return null;
+  return res.json();
+}
+
+export async function getTripLogs(carId = '') {
+  const query = carId ? `?car_id=${carId}` : '';
+  const res = await apiFetch(`/driver-services/trips/${query}`);
+  if (!res || !res.ok) return [];
+  return res.json();
+}
+
+export async function createTripLog(data) {
+  const res = await apiFetch('/driver-services/trips/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  const body = await res.json();
+  if (!res.ok) throw body;
+  return body;
+}
+
+export async function getFuelFillLogs(carId = '') {
+  const query = carId ? `?car_id=${carId}` : '';
+  const res = await apiFetch(`/driver-services/fuel-fills/${query}`);
+  if (!res || !res.ok) return [];
+  return res.json();
+}
+
+export async function createFuelFillLog(data) {
+  const res = await apiFetch('/driver-services/fuel-fills/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  const body = await res.json();
+  if (!res.ok) throw body;
+  return body;
+}
+
+export async function getMaintenanceRecords(carId = '') {
+  const query = carId ? `?car_id=${carId}` : '';
+  const res = await apiFetch(`/driver-services/maintenance/${query}`);
+  if (!res || !res.ok) return [];
+  return res.json();
+}
+
+export async function createMaintenanceRecord(data) {
+  const res = await apiFetch('/driver-services/maintenance/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  const body = await res.json();
+  if (!res.ok) throw body;
+  return body;
+}

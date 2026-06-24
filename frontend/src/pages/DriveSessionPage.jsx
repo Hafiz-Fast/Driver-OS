@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaceMesh } from '@mediapipe/face_mesh';
 import { Camera } from '@mediapipe/camera_utils';
+import { Activity, AlertTriangle, CheckCircle2, ScanFace, StopCircle, UserRoundX } from 'lucide-react';
 import { startSession, endSession, logSafetyEvent } from '../api';
 
 const LEFT_EYE = [362, 385, 387, 263, 373, 380];
@@ -212,6 +213,7 @@ function DriveSessionPage() {
           <p style={{ color: '#888', margin: 0 }}>Monitoring driver alertness in real time</p>
         </div>
         <button className="btn btn-danger" onClick={handleEndSession}>
+          <StopCircle size={18} />
           End Session
         </button>
       </div>
@@ -269,9 +271,20 @@ function DriveSessionPage() {
             fontFamily: 'monospace',
             fontSize: '14px',
           }}>
-            <div>Face Detected: <strong style={{ color: faceDetected ? '#51cf66' : '#ff6b6b' }}>{faceDetected ? 'YES' : 'NO'}</strong></div>
-            {faceDetected && <div>EAR Value: {earValue.toFixed(3)}</div>}
-            <div style={{ marginTop: '4px' }}>Status: <strong style={{ color: drowsyAlert ? '#ff6b6b' : '#51cf66' }}>{drowsyAlert ? 'DROWSY' : 'AWAKE'}</strong></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {faceDetected ? <ScanFace size={16} /> : <UserRoundX size={16} />}
+              Face Detected: <strong style={{ color: faceDetected ? '#51cf66' : '#ff6b6b' }}>{faceDetected ? 'YES' : 'NO'}</strong>
+            </div>
+            {faceDetected && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Activity size={16} />
+                EAR Value: {earValue.toFixed(3)}
+              </div>
+            )}
+            <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              {drowsyAlert ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+              Status: <strong style={{ color: drowsyAlert ? '#ff6b6b' : '#51cf66' }}>{drowsyAlert ? 'DROWSY' : 'AWAKE'}</strong>
+            </div>
           </div>
         </div>
 
@@ -285,7 +298,8 @@ function DriveSessionPage() {
               <span style={{ color: '#888' }}>Session ID:</span> {activeSession}
             </div>
             <hr style={{ borderColor: '#333', margin: '16px 0' }} />
-            <div style={{ color: drowsyAlert ? '#ff6b6b' : '#51cf66', fontWeight: 'bold', fontSize: '1.2rem', textAlign: 'center', marginTop: '24px' }}>
+            <div style={{ color: drowsyAlert ? '#ff6b6b' : '#51cf66', fontWeight: 'bold', fontSize: '1.2rem', textAlign: 'center', marginTop: '24px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+              {drowsyAlert ? <AlertTriangle size={22} /> : <CheckCircle2 size={22} />}
               {drowsyAlert ? 'ALERT' : 'SAFE'}
             </div>
           </div>

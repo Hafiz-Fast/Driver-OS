@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Car, Fuel, Gauge, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import { getCars, createCar, updateCar, deleteCar } from '../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -128,7 +129,8 @@ function DashboardPage() {
         </div>
         <div className="topbar-actions">
           <button className="btn btn-primary" onClick={openAddModal}>
-            + Add Vehicle
+            <Plus size={18} />
+            Add Vehicle
           </button>
         </div>
       </div>
@@ -136,21 +138,21 @@ function DashboardPage() {
       {/* Stats */}
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-icon blue">🚗</div>
+          <div className="stat-icon blue"><Car size={24} /></div>
           <div className="stat-content">
             <div className="stat-value">{cars.length}</div>
             <div className="stat-label">Total Vehicles</div>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon green">📏</div>
+          <div className="stat-icon green"><Gauge size={24} /></div>
           <div className="stat-content">
             <div className="stat-value">{totalMileage.toLocaleString()}</div>
             <div className="stat-label">Total Mileage (km)</div>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon amber">⛽</div>
+          <div className="stat-icon amber"><Fuel size={24} /></div>
           <div className="stat-content">
             <div className="stat-value">{fuelTypes.length}</div>
             <div className="stat-label">Fuel Types</div>
@@ -170,11 +172,12 @@ function DashboardPage() {
           </div>
         ) : cars.length === 0 ? (
           <div className="empty-state">
-            <span className="empty-icon">🚘</span>
+            <span className="empty-icon"><Car size={48} /></span>
             <h3>No vehicles yet</h3>
             <p>Add your first car to get started with tracking and management.</p>
             <button className="btn btn-primary" onClick={openAddModal}>
-              + Add Your First Vehicle
+              <Plus size={18} />
+              Add Your First Vehicle
             </button>
           </div>
         ) : (
@@ -182,13 +185,14 @@ function DashboardPage() {
             {cars.map((car) => (
               <div className="vehicle-card" key={car.id}>
                 <div className="vehicle-card-top">
-                  <div className="vehicle-icon-wrap">🚗</div>
+                  <div className="vehicle-icon-wrap"><Car size={28} /></div>
                   <div className="vehicle-card-actions">
-                    <button className="btn btn-ghost btn-sm" onClick={() => openEditModal(car)}>
-                      ✏️ Edit
+                    <button className="btn btn-ghost btn-sm" onClick={() => openEditModal(car)} title="Edit vehicle">
+                      <Pencil size={16} />
+                      Edit
                     </button>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleDelete(car.id)}>
-                      🗑️
+                    <button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(car.id)} title="Delete vehicle" aria-label={`Delete ${car.make} ${car.model}`}>
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </div>
@@ -212,7 +216,8 @@ function DashboardPage() {
                     style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center' }}
                     onClick={() => window.location.href = `/drive/${car.id}`}
                   >
-                    ▶️ Start Drive Session
+                    <Play size={17} fill="currentColor" />
+                    Start Drive Session
                   </button>
                 </div>
               </div>
@@ -318,7 +323,7 @@ function DashboardPage() {
                 </button>
                 <button className="btn btn-primary" type="submit" disabled={formLoading}>
                   {formLoading
-                    ? 'Saving…'
+                    ? 'Saving...'
                     : editingCar
                       ? 'Save Changes'
                       : 'Add Vehicle'}

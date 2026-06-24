@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Gauge } from 'lucide-react';
 import { signup as apiSignup } from '../api';
 
 function SignupPage() {
@@ -56,7 +57,7 @@ function SignupPage() {
     <div className="auth-page">
       <div className="auth-visual">
         <div className="auth-visual-content">
-          <div className="auth-logo">D</div>
+          <div className="auth-logo"><Gauge size={31} strokeWidth={2.4} /></div>
           <h2>Join Driver-OS</h2>
           <p>
             Set up your account and start tracking your vehicles in under a minute.
@@ -136,7 +137,7 @@ function SignupPage() {
               disabled={loading}
               style={{ width: '100%' }}
             >
-              {loading ? 'Creating account…' : 'Create Account'}
+              {loading ? 'Creating account...' : 'Create Account'}
             </button>
           </form>
 

@@ -69,3 +69,65 @@ class DrowsinessEvent(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     ear_value = models.FloatField()
     alert_triggered = models.BooleanField(default=True)
+
+
+class TripLog(models.Model):
+    car = models.ForeignKey(CarProfile, on_delete=models.CASCADE, related_name='trip_logs')
+    started_at = models.DateTimeField()
+    ended_at = models.DateTimeField()
+    start_location = models.CharField(max_length=255, blank=True)
+    end_location = models.CharField(max_length=255, blank=True)
+    distance_km = models.DecimalField(max_digits=8, decimal_places=2)
+    duration_minutes = models.PositiveIntegerField()
+    notes = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-started_at', '-created_at']
+
+    def __str__(self):
+        return f'{self.car} - {self.distance_km} km'
+
+
+class FuelFillLog(models.Model):
+    car = models.ForeignKey(CarProfile, on_delete=models.CASCADE, related_name='fuel_fill_logs')
+    filled_at = models.DateField()
+    litres = models.DecimalField(max_digits=8, decimal_places=2)
+    cost = models.DecimalField(max_digits=10, decimal_places=2)
+    odometer_reading = models.PositiveIntegerField()
+    station = models.CharField(max_length=120, blank=True)
+    notes = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-filled_at', '-odometer_reading', '-created_at']
+
+    def __str__(self):
+        return f'{self.car} - {self.litres} L'
+
+
+class MaintenanceRecord(models.Model):
+    STATUS_DONE = 'done'
+    STATUS_UPCOMING = 'upcoming'
+
+    STATUS_CHOICES = [
+        (STATUS_DONE, 'Done'),
+        (STATUS_UPCOMING, 'Upcoming'),
+    ]
+
+    car = models.ForeignKey(CarProfile, on_delete=models.CASCADE, related_name='maintenance_records')
+    title = models.CharField(max_length=120)
+    service_date = models.DateField(null=True, blank=True)
+    odometer_reading = models.PositiveIntegerField(null=True, blank=True)
+    cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    next_due_date = models.DateField(null=True, blank=True)
+    next_due_odometer = models.PositiveIntegerField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DONE)
+    notes = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['status', 'next_due_date', 'next_due_odometer', '-service_date', '-created_at']
+
+    def __str__(self):
+        return f'{self.car} - {self.title}'
