@@ -113,3 +113,34 @@ export async function deleteCar(id) {
   const res = await apiFetch(`/cars/${id}/`, { method: 'DELETE' });
   if (!res || !res.ok) throw new Error('Failed to delete car');
 }
+
+/* ─── sessions ─── */
+export async function startSession(carId) {
+  const res = await apiFetch('/sessions/start/', {
+    method: 'POST',
+    body: JSON.stringify({ car_id: carId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw data;
+  return data;
+}
+
+export async function endSession(sessionId) {
+  const res = await apiFetch('/sessions/end/', {
+    method: 'POST',
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw data;
+  return data;
+}
+
+export async function analyzeFrame(frame, sessionId) {
+  const res = await apiFetch('/sessions/analyze-frame/', {
+    method: 'POST',
+    body: JSON.stringify({ frame, session_id: sessionId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw data;
+  return data;
+}

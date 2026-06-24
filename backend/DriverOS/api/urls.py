@@ -3,6 +3,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from DriverOS.api.views.auth_views import GetUserView, SignupView
 from DriverOS.api.views.car_views import CarView, CarsView
+from DriverOS.api.views.session_views import StartSessionView, EndSessionView, AnalyzeFrameView
 
 urlpatterns = [
     path('user/', GetUserView.as_view(), name='get-user'),
@@ -11,4 +12,7 @@ urlpatterns = [
     path('refresh/', TokenRefreshView.as_view(), name='refresh'),
     path('cars/', CarsView.as_view(), name='create-car'),
     path('cars/<int:pk>/', CarView.as_view(), name='get-car'),
+    path('sessions/start/', StartSessionView.as_view()),
+    path('sessions/end/', EndSessionView.as_view()),
+    path('sessions/analyze-frame/', AnalyzeFrameView.as_view()),
 ]

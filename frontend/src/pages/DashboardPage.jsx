@@ -206,6 +206,15 @@ function DashboardPage() {
                     </div>
                   </div>
                 </div>
+                <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center' }}>
+                  <button 
+                    className="btn btn-primary" 
+                    style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center' }}
+                    onClick={() => window.location.href = `/drive/${car.id}`}
+                  >
+                    ▶️ Start Drive Session
+                  </button>
+                </div>
               </div>
             ))}
           </div>

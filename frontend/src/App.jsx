@@ -6,6 +6,7 @@ import SignupPage from './pages/SignupPage';
 import OnboardingPage from './pages/OnboardingPage';
 import DashboardPage from './pages/DashboardPage';
 import CarsPage from './pages/CarsPage';
+import DriveSessionPage from './pages/DriveSessionPage';
 
 /* ── Route guards ── */
 function PrivateRoute({ children }) {
@@ -71,6 +72,7 @@ function App() {
           {/* Protected dashboard routes */}
           <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
           <Route path="/cars" element={<PrivateRoute><CarsPage /></PrivateRoute>} />
+          <Route path="/drive/:carId" element={<PrivateRoute><DriveSessionPage /></PrivateRoute>} />
 
           {/* Default redirect */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

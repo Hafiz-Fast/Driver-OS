@@ -57,3 +57,15 @@ class CarProfile(models.Model):
 
     def __str__(self):
         return f'{self.make} {self.model} ({self.year})'
+
+class DriveSession(models.Model):
+    car = models.ForeignKey(CarProfile, on_delete=models.CASCADE, related_name='sessions')
+    started_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+class DrowsinessEvent(models.Model):
+    session = models.ForeignKey(DriveSession, on_delete=models.CASCADE, related_name='drowsiness_events')
+    timestamp = models.DateTimeField(auto_now_add=True)
+    ear_value = models.FloatField()
+    alert_triggered = models.BooleanField(default=True)
