@@ -135,10 +135,14 @@ export async function endSession(sessionId) {
   return data;
 }
 
-export async function analyzeFrame(frame, sessionId) {
-  const res = await apiFetch('/sessions/analyze-frame/', {
+export async function logSafetyEvent({ sessionId, earValue, eventType = 'drowsiness' }) {
+  const res = await apiFetch('/sessions/events/', {
     method: 'POST',
-    body: JSON.stringify({ frame, session_id: sessionId }),
+    body: JSON.stringify({
+      session_id: sessionId,
+      ear_value: earValue,
+      event_type: eventType,
+    }),
   });
   const data = await res.json();
   if (!res.ok) throw data;
