@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Gauge } from 'lucide-react';
+import Logo from '../components/Logo';
 import { login as apiLogin, getUser } from '../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -44,7 +44,7 @@ function LoginPage() {
     <div className="auth-page">
       <div className="auth-visual">
         <div className="auth-visual-content">
-          <div className="auth-logo"><Gauge size={31} strokeWidth={2.4} /></div>
+          <div className="auth-logo"><Logo size={32} /></div>
           <h2>Driver-OS</h2>
           <p>
             Your personal vehicle management hub. Track your cars, monitor maintenance,

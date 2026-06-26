@@ -74,6 +74,7 @@ function App() {
           <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
           <Route path="/cars" element={<PrivateRoute><CarsPage /></PrivateRoute>} />
           <Route path="/services" element={<PrivateRoute><DriverServicesPage /></PrivateRoute>} />
+          <Route path="/services/:tab" element={<PrivateRoute><DriverServicesPage /></PrivateRoute>} />
           <Route path="/drive/:carId" element={<PrivateRoute><DriveSessionPage /></PrivateRoute>} />
 
           {/* Default redirect */}

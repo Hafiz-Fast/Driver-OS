@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
+  ArrowRight,
   CalendarClock,
   Car,
   Clock,
   Fuel,
   Gauge,
+  Info,
   MapPin,
   Plus,
   Route,
@@ -23,6 +26,15 @@ import {
 
 const today = new Date().toISOString().slice(0, 10);
 
+/* ── Tabs (now route-driven) ── */
+const TABS = {
+  trips: { label: 'Trip Logger', icon: Route, heading: 'Trip Logger', sub: 'Record distances, duration, and routes.' },
+  fuel: { label: 'Fuel Fills', icon: Fuel, heading: 'Fuel Fill Logger', sub: 'Record refills to track consumption.' },
+  consumption: { label: 'Fuel Economy', icon: Gauge, heading: 'Fuel Economy Trends', sub: 'See your km/litre over time.' },
+  maintenance: { label: 'Maintenance', icon: Wrench, heading: 'Maintenance Tracker', sub: 'Log services and set reminders.' },
+};
+
+/* ── Empty form states ── */
 const emptyTrip = {
   distance_km: '',
   duration_minutes: '',
@@ -50,6 +62,7 @@ const emptyMaintenance = {
   notes: '',
 };
 
+/* ── Helpers ── */
 function toLocalDateTimeInput(date) {
   const offsetMs = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
@@ -81,17 +94,98 @@ function locationLabel(position) {
 
 async function getCurrentPositionSafe() {
   if (!navigator.geolocation) return null;
-
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       (position) => resolve(position),
       () => resolve(null),
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
     );
   });
 }
 
+/* ── Reusable components ── */
+function HelpBox({ children }) {
+  return (
+    <div className="service-help">
+      <Info size={17} />
+      <p>{children}</p>
+    </div>
+  );
+}
+
+function FieldWithUnit({ placeholder, unit, value, onChange, type = 'number', step, min, required, ...rest }) {
+  return (
+    <div className="field-wrap field-with-unit">
+      <input
+        className="form-input"
+        type={type}
+        step={step}
+        min={min}
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        required={required}
+        {...rest}
+      />
+      <span className="field-unit-badge">{unit}</span>
+    </div>
+  );
+}
+
+function FormLabel({ children }) {
+  return <label className="form-label">{children}</label>;
+}
+
+function FieldRow({ label, children }) {
+  return (
+    <div className="field-row">
+      {label && <FormLabel>{label}</FormLabel>}
+      {children}
+    </div>
+  );
+}
+
+function SectionTitle({ children }) {
+  return (
+    <p className="service-section-title">{children}</p>
+  );
+}
+
+/* ── Help text config ── */
+const HELP_TEXT = {
+  trips: (
+    <>
+      Log your trips either <strong>manually</strong> by filling in the details below, or
+      use <strong>Live Trip</strong> to capture duration and GPS automatically. Your trip history
+      helps track total kilometres driven over time.
+    </>
+  ),
+  fuel: (
+    <>
+      Record each refill to track fuel economy. Make sure to enter the <strong>distance travelled</strong> shown
+      on your odometer at each fill. After two or more fills, the Fuel Economy tab shows your consumption trend.
+    </>
+  ),
+  consumption: (
+    <>
+      Fuel economy is calculated from <strong>consecutive fuel fills</strong>. The system compares distance
+      travelled between fills against the fuel you added. Add at least two fills with distance readings to
+      see your first data point.
+    </>
+  ),
+  maintenance: (
+    <>
+      Log completed services and set reminders for upcoming ones. Each reminder can be based on a <strong>date</strong>,
+      a <strong>distance</strong> (km), or both. Items nearing their due threshold are highlighted automatically.
+    </>
+  ),
+};
+
 function DriverServicesPage() {
+  const { tab } = useParams();
+  const navigate = useNavigate();
+  const activeTab = TABS[tab] ? tab : null; // null => overview
+
   const [cars, setCars] = useState([]);
   const [selectedCarId, setSelectedCarId] = useState('');
   const [summary, setSummary] = useState(null);
@@ -116,7 +210,6 @@ function DriverServicesPage() {
         setLoading(false);
       }
     }
-
     loadInitial();
   }, []);
 
@@ -125,7 +218,7 @@ function DriverServicesPage() {
     loadServiceData(selectedCarId);
   }, [selectedCarId]);
 
-  async function loadServiceData(carId) {
+  const loadServiceData = useCallback(async (carId) => {
     setLoading(true);
     setError('');
     try {
@@ -144,13 +237,14 @@ function DriverServicesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   const selectedCar = useMemo(
     () => cars.find((car) => String(car.id) === selectedCarId),
-    [cars, selectedCarId]
+    [cars, selectedCarId],
   );
 
+  /* ── Trip actions ── */
   async function startTrip() {
     setError('');
     const position = await getCurrentPositionSafe();
@@ -168,7 +262,6 @@ function DriverServicesPage() {
     if (!activeTrip || !selectedCarId) return;
     setSaving('trip');
     setError('');
-
     const endedAt = new Date();
     const position = await getCurrentPositionSafe();
     const endPosition = position
@@ -206,7 +299,6 @@ function DriverServicesPage() {
     setError('');
     const endedAt = new Date();
     const startedAt = new Date(endedAt.getTime() - Number(tripForm.duration_minutes) * 60000);
-
     try {
       await createTripLog({
         car: selectedCarId,
@@ -225,6 +317,7 @@ function DriverServicesPage() {
     }
   }
 
+  /* ── Fuel actions ── */
   async function addFuelFill(e) {
     e.preventDefault();
     setSaving('fuel');
@@ -246,6 +339,7 @@ function DriverServicesPage() {
     }
   }
 
+  /* ── Maintenance actions ── */
   async function addMaintenance(e) {
     e.preventDefault();
     setSaving('maintenance');
@@ -259,7 +353,6 @@ function DriverServicesPage() {
       service_date: maintenanceForm.service_date || null,
       next_due_date: maintenanceForm.next_due_date || null,
     };
-
     try {
       await createMaintenanceRecord(payload);
       setMaintenanceForm(emptyMaintenance);
@@ -273,26 +366,40 @@ function DriverServicesPage() {
 
   const maxTrend = Math.max(
     1,
-    ...(summary?.consumption_points || []).map((point) => point.km_per_litre)
+    ...(summary?.consumption_points || []).map((point) => point.km_per_litre),
   );
+
+  const overviewCards = [
+    { id: 'trips', icon: Route, color: 'blue', title: 'Trip Logger', desc: 'Log distances, duration, and routes with live GPS capture.' },
+    { id: 'fuel', icon: Fuel, color: 'amber', title: 'Fuel Fills', desc: 'Record each refill to track consumption and cost.' },
+    { id: 'consumption', icon: Gauge, color: 'green', title: 'Fuel Economy', desc: 'See your km/litre trend calculated across fills.' },
+    { id: 'maintenance', icon: Wrench, color: 'red', title: 'Maintenance', desc: 'Log services and set date or distance reminders.' },
+  ];
 
   return (
     <>
+      {/* Top bar */}
       <div className="topbar">
         <div className="topbar-left">
-          <h1>Driver Services</h1>
-          <p>Trips, fuel economy, and maintenance reminders in one place.</p>
+          <h1>{activeTab ? TABS[activeTab].heading : 'Driver Services'}</h1>
+          <p>
+            {activeTab
+              ? TABS[activeTab].sub
+              : 'Trips, fuel economy, and maintenance reminders in one place.'}
+          </p>
         </div>
         <div className="topbar-actions">
-          <select
-            className="form-select service-car-select"
-            value={selectedCarId}
-            onChange={(e) => setSelectedCarId(e.target.value)}
-          >
-            {cars.map((car) => (
-              <option key={car.id} value={car.id}>{car.display_name}</option>
-            ))}
-          </select>
+          {cars.length > 0 && (
+            <select
+              className="form-select service-car-select"
+              value={selectedCarId}
+              onChange={(e) => setSelectedCarId(e.target.value)}
+            >
+              {cars.map((car) => (
+                <option key={car.id} value={car.id}>{car.display_name}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 
@@ -306,211 +413,447 @@ function DriverServicesPage() {
         <>
           {error && <div className="auth-error-box">{error}</div>}
 
-          <div className="service-hero">
-            <div>
-              <span className="service-kicker">{selectedCar?.display_name || 'Selected vehicle'}</span>
-              <h2>Daily driving command center</h2>
-              <p>Log what happened, see what it costs, and know what needs attention next.</p>
-            </div>
-            <div className="service-hero-actions">
-              {!activeTrip ? (
-                <button className="btn btn-primary btn-lg" onClick={startTrip}>
-                  <Route size={20} />
-                  Start Trip
-                </button>
-              ) : (
-                <button className="btn btn-danger btn-lg" onClick={stopTrip} disabled={saving === 'trip'}>
-                  <Clock size={20} />
-                  {saving === 'trip' ? 'Saving...' : 'End Trip'}
-                </button>
-              )}
-            </div>
-          </div>
-
+          {/* Summary stats */}
           <div className="stats-grid">
             <div className="stat-card">
               <div className="stat-icon blue"><Route size={24} /></div>
               <div className="stat-content">
                 <div className="stat-value">{summary?.total_trip_distance_km ?? 0}</div>
-                <div className="stat-label">Trip km logged</div>
+                <div className="stat-label">Total Trip (km)</div>
               </div>
             </div>
             <div className="stat-card">
               <div className="stat-icon green"><Fuel size={24} /></div>
               <div className="stat-content">
                 <div className="stat-value">{summary?.average_km_per_litre ?? '--'}</div>
-                <div className="stat-label">Average km/litre</div>
+                <div className="stat-label">Average (km/L)</div>
               </div>
             </div>
             <div className="stat-card">
               <div className="stat-icon amber"><Gauge size={24} /></div>
               <div className="stat-content">
                 <div className="stat-value">{summary?.average_cost_per_km ?? '--'}</div>
-                <div className="stat-label">Average cost per km</div>
+                <div className="stat-label">Avg Cost / km</div>
               </div>
             </div>
             <div className="stat-card">
               <div className="stat-icon red"><Wrench size={24} /></div>
               <div className="stat-content">
                 <div className="stat-value">{summary?.due_maintenance?.length ?? 0}</div>
-                <div className="stat-label">Service reminders</div>
+                <div className="stat-label">Service Reminders</div>
               </div>
             </div>
           </div>
 
-          <div className="service-grid">
-            <section className="service-panel">
-              <div className="service-panel-header">
-                <div>
-                  <h3><Route size={20} /> Trip Logger</h3>
-                  <p>Auto duration and GPS coordinates when available.</p>
-                </div>
-              </div>
-
-              {activeTrip && (
-                <div className="active-trip-strip">
-                  <MapPin size={18} />
-                  <div>
-                    <strong>Trip in progress</strong>
-                    <span>Started {toLocalDateTimeInput(activeTrip.startedAt).replace('T', ' ')}</span>
-                  </div>
-                </div>
-              )}
-
-              <form onSubmit={addManualTrip} className="service-form">
-                <div className="form-row">
-                  <input className="form-input" type="number" step="0.1" min="0" placeholder="Distance km" value={tripForm.distance_km} onChange={(e) => setTripForm({ ...tripForm, distance_km: e.target.value })} required />
-                  <input className="form-input" type="number" min="1" placeholder="Duration min" value={tripForm.duration_minutes} onChange={(e) => setTripForm({ ...tripForm, duration_minutes: e.target.value })} required />
-                </div>
-                <div className="form-row">
-                  <input className="form-input" placeholder="Start location" value={tripForm.start_location} onChange={(e) => setTripForm({ ...tripForm, start_location: e.target.value })} />
-                  <input className="form-input" placeholder="End location" value={tripForm.end_location} onChange={(e) => setTripForm({ ...tripForm, end_location: e.target.value })} />
-                </div>
-                <input className="form-input" placeholder="Notes" value={tripForm.notes} onChange={(e) => setTripForm({ ...tripForm, notes: e.target.value })} />
-                <button className="btn btn-secondary" disabled={saving === 'manual-trip'}>
-                  <Plus size={17} />
-                  {saving === 'manual-trip' ? 'Saving...' : 'Add Manual Trip'}
-                </button>
-              </form>
-
-              <div className="service-list">
-                {trips.slice(0, 4).map((trip) => (
-                  <div className="service-list-item" key={trip.id}>
-                    <Route size={18} />
-                    <div>
-                      <strong>{trip.distance_km} km</strong>
-                      <span>{formatMinutes(trip.duration_minutes)} · {trip.start_location || 'Start'} to {trip.end_location || 'End'}</span>
+          {/* ── OVERVIEW (no tab) ── */}
+          {!activeTab && (
+            <div className="service-overview-grid">
+              {overviewCards.map((card) => {
+                const Icon = card.icon;
+                return (
+                  <button
+                    key={card.id}
+                    className="feature-card service-overview-card"
+                    onClick={() => navigate(`/services/${card.id}`)}
+                  >
+                    <div className={`feature-card-icon ${card.color}`}>
+                      <Icon size={26} />
                     </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+                    <h3>{card.title}</h3>
+                    <p>{card.desc}</p>
+                    <span className="btn btn-sm btn-ghost">
+                      Open
+                      <ArrowRight size={15} />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-            <section className="service-panel">
-              <div className="service-panel-header">
-                <div>
-                  <h3><Fuel size={20} /> Fuel Fill Logger</h3>
-                  <p>Capture litres, cost, station, and odometer.</p>
+          {/* ── TAB CONTENT ── */}
+          {activeTab && (
+            <div className="service-panel service-panel-wide">
+              {loading ? (
+                <div className="empty-state">
+                  <div className="spinner" />
                 </div>
-              </div>
-
-              <form onSubmit={addFuelFill} className="service-form">
-                <div className="form-row">
-                  <input className="form-input" type="date" value={fuelForm.filled_at} onChange={(e) => setFuelForm({ ...fuelForm, filled_at: e.target.value })} required />
-                  <input className="form-input" type="number" step="0.01" min="0.01" placeholder="Litres" value={fuelForm.litres} onChange={(e) => setFuelForm({ ...fuelForm, litres: e.target.value })} required />
-                </div>
-                <div className="form-row">
-                  <input className="form-input" type="number" step="0.01" min="0" placeholder="Cost" value={fuelForm.cost} onChange={(e) => setFuelForm({ ...fuelForm, cost: e.target.value })} required />
-                  <input className="form-input" type="number" min="0" placeholder="Odometer" value={fuelForm.odometer_reading} onChange={(e) => setFuelForm({ ...fuelForm, odometer_reading: e.target.value })} required />
-                </div>
-                <input className="form-input" placeholder="Station" value={fuelForm.station} onChange={(e) => setFuelForm({ ...fuelForm, station: e.target.value })} />
-                <button className="btn btn-secondary" disabled={saving === 'fuel'}>
-                  <Plus size={17} />
-                  {saving === 'fuel' ? 'Saving...' : 'Add Fuel Fill'}
-                </button>
-              </form>
-
-              <div className="service-list">
-                {fuelFills.slice(0, 4).map((fill) => (
-                  <div className="service-list-item" key={fill.id}>
-                    <Fuel size={18} />
-                    <div>
-                      <strong>{fill.litres} L · {fill.cost}</strong>
-                      <span>{fill.filled_at} · {fill.odometer_reading.toLocaleString()} km</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="service-panel">
-              <div className="service-panel-header">
-                <div>
-                  <h3><Gauge size={20} /> Fuel Consumption</h3>
-                  <p>Calculated from consecutive fuel odometer readings.</p>
-                </div>
-              </div>
-              <div className="trend-bars">
-                {(summary?.consumption_points || []).length === 0 ? (
-                  <div className="service-muted">Add at least two fuel fills to see km/litre trends.</div>
-                ) : (
-                  summary.consumption_points.map((point) => (
-                    <div className="trend-bar-row" key={`${point.date}-${point.km}`}>
-                      <span>{point.date}</span>
-                      <div className="trend-track">
-                        <div style={{ width: `${Math.max(8, (point.km_per_litre / maxTrend) * 100)}%` }} />
+              ) : (
+                <>
+                  {/* ── TRIP LOGGER ── */}
+                  {activeTab === 'trips' && (
+                    <>
+                      <div className="service-panel-header">
+                        <div>
+                          <h3>Trip Logger</h3>
+                          <p>Record distances, duration, and routes.</p>
+                        </div>
+                        <div className="service-hero-actions">
+                          {!activeTrip ? (
+                            <button className="btn btn-primary btn-sm" onClick={startTrip}>
+                              <MapPin size={16} />
+                              Live Trip
+                            </button>
+                          ) : (
+                            <button className="btn btn-danger btn-sm" onClick={stopTrip} disabled={saving === 'trip'}>
+                              <Clock size={16} />
+                              {saving === 'trip' ? 'Saving...' : 'End Trip'}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <strong>{point.km_per_litre} km/L</strong>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
 
-            <section className="service-panel">
-              <div className="service-panel-header">
-                <div>
-                  <h3><Wrench size={20} /> Maintenance Tracker</h3>
-                  <p>Log services and set mileage/date reminders.</p>
-                </div>
-              </div>
+                      <HelpBox>{HELP_TEXT.trips}</HelpBox>
 
-              <form onSubmit={addMaintenance} className="service-form">
-                <input className="form-input" placeholder="Service title e.g. Oil change" value={maintenanceForm.title} onChange={(e) => setMaintenanceForm({ ...maintenanceForm, title: e.target.value })} required />
-                <div className="form-row">
-                  <select className="form-select" value={maintenanceForm.status} onChange={(e) => setMaintenanceForm({ ...maintenanceForm, status: e.target.value })}>
-                    <option value="done">Completed</option>
-                    <option value="upcoming">Upcoming</option>
-                  </select>
-                  <input className="form-input" type="date" value={maintenanceForm.service_date} onChange={(e) => setMaintenanceForm({ ...maintenanceForm, service_date: e.target.value })} />
-                </div>
-                <div className="form-row">
-                  <input className="form-input" type="number" min="0" placeholder="Service odometer" value={maintenanceForm.odometer_reading} onChange={(e) => setMaintenanceForm({ ...maintenanceForm, odometer_reading: e.target.value })} />
-                  <input className="form-input" type="number" step="0.01" min="0" placeholder="Cost" value={maintenanceForm.cost} onChange={(e) => setMaintenanceForm({ ...maintenanceForm, cost: e.target.value })} />
-                </div>
-                <div className="form-row">
-                  <input className="form-input" type="date" value={maintenanceForm.next_due_date} onChange={(e) => setMaintenanceForm({ ...maintenanceForm, next_due_date: e.target.value })} />
-                  <input className="form-input" type="number" min="0" placeholder="Next due km" value={maintenanceForm.next_due_odometer} onChange={(e) => setMaintenanceForm({ ...maintenanceForm, next_due_odometer: e.target.value })} />
-                </div>
-                <button className="btn btn-secondary" disabled={saving === 'maintenance'}>
-                  <CalendarClock size={17} />
-                  {saving === 'maintenance' ? 'Saving...' : 'Save Service'}
-                </button>
-              </form>
+                      {activeTrip && (
+                        <div className="active-trip-strip">
+                          <MapPin size={17} />
+                          <div>
+                            <strong>Trip in progress</strong>
+                            <span>Started {toLocalDateTimeInput(activeTrip.startedAt).replace('T', ' ')}</span>
+                          </div>
+                        </div>
+                      )}
 
-              <div className="service-list">
-                {maintenance.slice(0, 4).map((item) => (
-                  <div className={`service-list-item reminder-${item.reminder_state}`} key={item.id}>
-                    <Wrench size={18} />
-                    <div>
-                      <strong>{item.title}</strong>
-                      <span>{item.next_due_odometer ? `${item.next_due_odometer.toLocaleString()} km` : 'No mileage reminder'} {item.next_due_date ? `· ${item.next_due_date}` : ''}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
+                      <form onSubmit={addManualTrip} className="service-form compact">
+                        <div className="form-row">
+                          <FieldRow label="Distance travelled">
+                            <FieldWithUnit
+                              placeholder="0.0"
+                              unit="km"
+                              value={tripForm.distance_km}
+                              onChange={(e) => setTripForm({ ...tripForm, distance_km: e.target.value })}
+                              step="0.1"
+                              min="0"
+                              required
+                            />
+                          </FieldRow>
+                          <FieldRow label="Duration">
+                            <FieldWithUnit
+                              placeholder="0"
+                              unit="min"
+                              value={tripForm.duration_minutes}
+                              onChange={(e) => setTripForm({ ...tripForm, duration_minutes: e.target.value })}
+                              min="1"
+                              required
+                            />
+                          </FieldRow>
+                        </div>
+                        <div className="form-row">
+                          <FieldRow label="Start location">
+                            <input
+                              className="form-input"
+                              placeholder="City or address"
+                              value={tripForm.start_location}
+                              onChange={(e) => setTripForm({ ...tripForm, start_location: e.target.value })}
+                            />
+                          </FieldRow>
+                          <FieldRow label="End location">
+                            <input
+                              className="form-input"
+                              placeholder="City or address"
+                              value={tripForm.end_location}
+                              onChange={(e) => setTripForm({ ...tripForm, end_location: e.target.value })}
+                            />
+                          </FieldRow>
+                        </div>
+                        <FieldRow label="Notes (optional)">
+                          <input
+                            className="form-input"
+                            placeholder="e.g. Traffic, weather, purpose"
+                            value={tripForm.notes}
+                            onChange={(e) => setTripForm({ ...tripForm, notes: e.target.value })}
+                          />
+                        </FieldRow>
+                        <div>
+                          <button className="btn btn-secondary btn-sm" disabled={saving === 'manual-trip'}>
+                            <Plus size={16} />
+                            {saving === 'manual-trip' ? 'Saving...' : 'Add Manual Trip'}
+                          </button>
+                        </div>
+                      </form>
+
+                      {trips.length > 0 && (
+                        <div className="service-list">
+                          <SectionTitle>Recent Trips</SectionTitle>
+                          {trips.slice(0, 8).map((trip) => (
+                            <div className="service-list-item" key={trip.id}>
+                              <Route size={16} />
+                              <div>
+                                <strong>{trip.distance_km} km</strong>
+                                <span>
+                                  {formatMinutes(trip.duration_minutes)}
+                                  {trip.start_location ? ` · ${trip.start_location} → ${trip.end_location || '?'}` : ''}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {trips.length === 0 && (
+                        <p className="service-empty-line">No trips yet. Add a manual trip or start a live trip above.</p>
+                      )}
+                    </>
+                  )}
+
+                  {/* ── FUEL FILLS ── */}
+                  {activeTab === 'fuel' && (
+                    <>
+                      <div className="service-panel-header">
+                        <div>
+                          <h3>Fuel Fill Logger</h3>
+                          <p>Record refills to track consumption.</p>
+                        </div>
+                      </div>
+
+                      <HelpBox>{HELP_TEXT.fuel}</HelpBox>
+
+                      <form onSubmit={addFuelFill} className="service-form compact">
+                        <div className="form-row">
+                          <FieldRow label="Date of refill">
+                            <input
+                              className="form-input"
+                              type="date"
+                              value={fuelForm.filled_at}
+                              onChange={(e) => setFuelForm({ ...fuelForm, filled_at: e.target.value })}
+                              required
+                            />
+                          </FieldRow>
+                          <FieldRow label="Fuel volume">
+                            <FieldWithUnit
+                              placeholder="0.00"
+                              unit="Litre"
+                              value={fuelForm.litres}
+                              onChange={(e) => setFuelForm({ ...fuelForm, litres: e.target.value })}
+                              step="0.01"
+                              min="0.01"
+                              required
+                            />
+                          </FieldRow>
+                        </div>
+                        <div className="form-row">
+                          <FieldRow label="Total cost">
+                            <FieldWithUnit
+                              placeholder="0.00"
+                              unit="pkr"
+                              value={fuelForm.cost}
+                              onChange={(e) => setFuelForm({ ...fuelForm, cost: e.target.value })}
+                              step="0.01"
+                              min="0"
+                              required
+                            />
+                          </FieldRow>
+                          <FieldRow label="Distance travelled at fill">
+                            <FieldWithUnit
+                              placeholder="0"
+                              unit="km"
+                              value={fuelForm.odometer_reading}
+                              onChange={(e) => setFuelForm({ ...fuelForm, odometer_reading: e.target.value })}
+                              min="0"
+                              required
+                            />
+                          </FieldRow>
+                        </div>
+                        <FieldRow label="Station (optional)">
+                          <input
+                            className="form-input"
+                            placeholder="Station name"
+                            value={fuelForm.station}
+                            onChange={(e) => setFuelForm({ ...fuelForm, station: e.target.value })}
+                          />
+                        </FieldRow>
+                        <div>
+                          <button className="btn btn-secondary btn-sm" disabled={saving === 'fuel'}>
+                            <Plus size={16} />
+                            {saving === 'fuel' ? 'Saving...' : 'Add Fuel Fill'}
+                          </button>
+                        </div>
+                      </form>
+
+                      {fuelFills.length > 0 && (
+                        <div className="service-list">
+                          <SectionTitle>Recent Fills</SectionTitle>
+                          {fuelFills.slice(0, 8).map((fill) => (
+                            <div className="service-list-item" key={fill.id}>
+                              <Fuel size={16} />
+                              <div>
+                                <strong>{fill.litres} L — ${fill.cost}</strong>
+                                <span>{fill.filled_at} · {fill.odometer_reading.toLocaleString()} km</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {fuelFills.length === 0 && (
+                        <p className="service-empty-line">No fuel fills recorded yet. Add your first fill above.</p>
+                      )}
+                    </>
+                  )}
+
+                  {/* ── FUEL ECONOMY ── */}
+                  {activeTab === 'consumption' && (
+                    <>
+                      <div className="service-panel-header">
+                        <div>
+                          <h3>Fuel Economy Trends</h3>
+                          <p>See your km/litre over time.</p>
+                        </div>
+                      </div>
+
+                      <HelpBox>{HELP_TEXT.consumption}</HelpBox>
+
+                      <div className="trend-bars">
+                        {(summary?.consumption_points || []).length === 0 ? (
+                          <div className="trend-empty">
+                            <p>Not enough data yet.</p>
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              onClick={() => navigate('/services/fuel')}
+                            >
+                              <Fuel size={16} />
+                              Go to Fuel Fills
+                            </button>
+                          </div>
+                        ) : (
+                          summary.consumption_points.map((point) => (
+                            <div className="trend-bar-row" key={`${point.date}-${point.km}`}>
+                              <span>{point.date}</span>
+                              <div className="trend-track">
+                                <div style={{ width: `${Math.max(8, (point.km_per_litre / maxTrend) * 100)}%` }} />
+                              </div>
+                              <strong>{point.km_per_litre} km/L</strong>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── MAINTENANCE ── */}
+                  {activeTab === 'maintenance' && (
+                    <>
+                      <div className="service-panel-header">
+                        <div>
+                          <h3>Maintenance Tracker</h3>
+                          <p>Log services and set reminders.</p>
+                        </div>
+                      </div>
+
+                      <HelpBox>{HELP_TEXT.maintenance}</HelpBox>
+
+                      <form onSubmit={addMaintenance} className="service-form compact">
+                        <FieldRow label="Service description">
+                          <input
+                            className="form-input"
+                            placeholder="e.g. Oil change, Tyre rotation, Brake pads"
+                            value={maintenanceForm.title}
+                            onChange={(e) => setMaintenanceForm({ ...maintenanceForm, title: e.target.value })}
+                            required
+                          />
+                        </FieldRow>
+                        <div className="form-row">
+                          <FieldRow label="Status">
+                            <select
+                              className="form-select"
+                              value={maintenanceForm.status}
+                              onChange={(e) => setMaintenanceForm({ ...maintenanceForm, status: e.target.value })}
+                            >
+                              <option value="done">Completed</option>
+                              <option value="upcoming">Upcoming</option>
+                            </select>
+                          </FieldRow>
+                          <FieldRow label="Service date">
+                            <input
+                              className="form-input"
+                              type="date"
+                              value={maintenanceForm.service_date}
+                              onChange={(e) => setMaintenanceForm({ ...maintenanceForm, service_date: e.target.value })}
+                            />
+                          </FieldRow>
+                        </div>
+                        <div className="form-row">
+                          <FieldRow label="Distance at service">
+                            <FieldWithUnit
+                              placeholder="0"
+                              unit="km"
+                              value={maintenanceForm.odometer_reading}
+                              onChange={(e) => setMaintenanceForm({ ...maintenanceForm, odometer_reading: e.target.value })}
+                              min="0"
+                            />
+                          </FieldRow>
+                          <FieldRow label="Cost">
+                            <FieldWithUnit
+                              placeholder="0.00"
+                              unit="$"
+                              value={maintenanceForm.cost}
+                              onChange={(e) => setMaintenanceForm({ ...maintenanceForm, cost: e.target.value })}
+                              step="0.01"
+                              min="0"
+                            />
+                          </FieldRow>
+                        </div>
+
+                        <div className="service-divider">
+                          <SectionTitle>Next Service Reminder</SectionTitle>
+                          <div className="form-row">
+                            <FieldRow label="Due date">
+                              <input
+                                className="form-input"
+                                type="date"
+                                value={maintenanceForm.next_due_date}
+                                onChange={(e) => setMaintenanceForm({ ...maintenanceForm, next_due_date: e.target.value })}
+                              />
+                            </FieldRow>
+                            <FieldRow label="Due at distance">
+                              <FieldWithUnit
+                                placeholder="0"
+                                unit="km"
+                                value={maintenanceForm.next_due_odometer}
+                                onChange={(e) => setMaintenanceForm({ ...maintenanceForm, next_due_odometer: e.target.value })}
+                                min="0"
+                              />
+                            </FieldRow>
+                          </div>
+                        </div>
+
+                        <div>
+                          <button className="btn btn-secondary btn-sm" disabled={saving === 'maintenance'}>
+                            <CalendarClock size={16} />
+                            {saving === 'maintenance' ? 'Saving...' : 'Save Service Record'}
+                          </button>
+                        </div>
+                      </form>
+
+                      {maintenance.length > 0 && (
+                        <div className="service-list">
+                          <SectionTitle>Service History</SectionTitle>
+                          {maintenance.slice(0, 8).map((item) => (
+                            <div className={`service-list-item reminder-${item.reminder_state}`} key={item.id}>
+                              <Wrench size={16} />
+                              <div>
+                                <strong>{item.title}</strong>
+                                <span>
+                                  {item.next_due_odometer
+                                    ? `Reminder at ${item.next_due_odometer.toLocaleString()} km`
+                                    : item.next_due_date
+                                      ? `Reminder by ${item.next_due_date}`
+                                      : 'No reminder'}
+                                  {item.cost ? ` · $${item.cost}` : ''}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {maintenance.length === 0 && (
+                        <p className="service-empty-line">No service records yet. Add your first one above.</p>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
     </>
