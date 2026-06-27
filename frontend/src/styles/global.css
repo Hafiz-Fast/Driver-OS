@@ -1165,6 +1165,11 @@ a {
   max-width: 760px;
 }
 
+/* Trip logger needs full width for the map + form split panel */
+.service-panel-wide.trip-full-width {
+  max-width: 100%;
+}
+
 .service-panel-wide .service-panel-header {
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border-light);
@@ -1215,6 +1220,202 @@ a {
 
 .trend-empty p {
   color: var(--text-muted);
+}
+
+/* ═══════════════════════════════════════════════
+   Trip Logger — split-panel layout
+   ═══════════════════════════════════════════════ */
+
+.trip-split {
+  display: flex;
+  gap: 20px;
+  margin-top: 18px;
+}
+
+.trip-split-map {
+  flex: 1.5;
+  min-height: 440px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.trip-split-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* Map container — hide mapbox attributions for clean look */
+.trip-map-container .mapboxgl-ctrl-attrib {
+  display: none !important;
+}
+
+/* ── Map markers ── */
+.trip-marker {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trip-marker-pin {
+  width: 28px;
+  height: 28px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.trip-marker-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+  transform: rotate(45deg);
+}
+
+.trip-marker-start .trip-marker-pin {
+  background: #22c55e;
+}
+
+.trip-marker-start .trip-marker-dot {
+  background: #22c55e;
+}
+
+.trip-marker-end .trip-marker-pin {
+  background: #ef4444;
+}
+
+.trip-marker-end .trip-marker-dot {
+  background: #ef4444;
+}
+
+/* ── Live trip stats grid ── */
+.trip-live-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.trip-live-stat {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 14px 12px;
+  text-align: center;
+}
+
+.trip-live-stat .value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--blue);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.trip-live-stat .label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}
+
+.trip-live-stat .value.timer {
+  font-size: 1.6rem;
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  color: var(--text-primary);
+}
+
+/* ── Map overlay badge (distance) ── */
+.trip-map-overlay {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.88);
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+}
+
+/* ── Location field with "Use Current" button ── */
+.location-field-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.location-field-group .form-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-current {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.location-field-group.focused .form-input {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* ── Auto-calculated field badge ── */
+.field-auto {
+  position: relative;
+}
+
+.field-auto-badge {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--blue);
+  background: var(--surface);
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border-light);
+  pointer-events: none;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.field-auto .form-input {
+  background: rgba(59, 130, 246, 0.04);
+}
+
+/* ── Responsive: stack on narrow screens ── */
+@media (max-width: 900px) {
+  .trip-split {
+    flex-direction: column;
+  }
+
+  .trip-split-map {
+    min-height: 300px;
+  }
 }
 
 /* ── Dashboard feature cards ── */

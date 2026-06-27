@@ -1,18 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowRight,
   CalendarClock,
   Car,
   Clock,
+  Crosshair,
   Fuel,
   Gauge,
   Info,
   MapPin,
+  Navigation,
   Plus,
   Route,
   Wrench,
 } from 'lucide-react';
+import TripMap from '../components/TripMap';
+import useGeolocation from '../hooks/useGeolocation';
 import {
   createFuelFillLog,
   createMaintenanceRecord,
@@ -39,7 +43,9 @@ const emptyTrip = {
   distance_km: '',
   duration_minutes: '',
   start_location: '',
+  start_coord: null,   // [lng, lat] or null
   end_location: '',
+  end_coord: null,      // [lng, lat] or null
   notes: '',
 };
 
@@ -78,13 +84,33 @@ function formatMinutes(minutes) {
 function haversineKm(start, end) {
   const toRad = (value) => (value * Math.PI) / 180;
   const earthRadiusKm = 6371;
-  const dLat = toRad(end.lat - start.lat);
-  const dLng = toRad(end.lng - start.lng);
-  const lat1 = toRad(start.lat);
-  const lat2 = toRad(end.lat);
+  /* Accept {lat, lng} objects or [lng, lat] arrays */
+  const lat1 = toRad(Array.isArray(start) ? start[1] : start.lat);
+  const lng1 = toRad(Array.isArray(start) ? start[0] : start.lng);
+  const lat2 = toRad(Array.isArray(end) ? end[1] : end.lat);
+  const lng2 = toRad(Array.isArray(end) ? end[0] : end.lng);
+  const dLat = lat2 - lat1;
+  const dLng = lng2 - lng1;
   const a = Math.sin(dLat / 2) ** 2
     + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Sum haversine distance across a breadcrumb trail of [lng, lat] coords */
+function sumPathDistanceKm(coords) {
+  if (coords.length < 2) return 0;
+  let total = 0;
+  for (let i = 1; i < coords.length; i++) {
+    total += haversineKm(coords[i - 1], coords[i]);
+  }
+  return total;
+}
+
+function coordToLabel(coord) {
+  if (!coord) return '';
+  const lat = Array.isArray(coord) ? coord[1] : coord.lat;
+  const lng = Array.isArray(coord) ? coord[0] : coord.lng;
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
 function locationLabel(position) {
@@ -200,6 +226,13 @@ function DriverServicesPage() {
   const [fuelForm, setFuelForm] = useState(emptyFuel);
   const [maintenanceForm, setMaintenanceForm] = useState(emptyMaintenance);
 
+  /* ── Trip map state ── */
+  const [focusedField, setFocusedField] = useState(null);   // 'start' | 'end' | null
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [watching, setWatching] = useState(false);          // true only during live trip
+  const timerRef = useRef(null);
+  const geoLive = useGeolocation({ watch: watching, interval: 3000 });
+
   useEffect(() => {
     async function loadInitial() {
       const carData = await getCars();
@@ -211,6 +244,14 @@ function DriverServicesPage() {
       }
     }
     loadInitial();
+  }, []);
+
+  /* ── Cleanup live timer + GPS watch on unmount ── */
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      setWatching(false);
+    };
   }, []);
 
   useEffect(() => {
@@ -251,26 +292,60 @@ function DriverServicesPage() {
     const now = new Date();
     setActiveTrip({
       startedAt: now,
-      startPosition: position
-        ? { lat: position.coords.latitude, lng: position.coords.longitude }
+      startCoord: position
+        ? [position.coords.longitude, position.coords.latitude]
         : null,
+      pathCoords: [],
       startLocation: position ? locationLabel(position) : '',
     });
+    setElapsedSeconds(0);
+    // Start live timer + GPS tracking
+    timerRef.current = setInterval(() => {
+      setElapsedSeconds((s) => s + 1);
+    }, 1000);
+    setWatching(true);
   }
+
+  /* ── Feed GPS watch updates into the live trip's breadcrumb trail ── */
+  useEffect(() => {
+    if (!watching || !geoLive.position || !activeTrip) return;
+    const coord = [geoLive.position.coords.longitude, geoLive.position.coords.latitude];
+    // De-duplicate identical consecutive points
+    const last = activeTrip.pathCoords?.[activeTrip.pathCoords.length - 1];
+    const start = activeTrip.startCoord;
+    const isDuplicate = (start && start[0] === coord[0] && start[1] === coord[1])
+      || (last && last[0] === coord[0] && last[1] === coord[1]);
+    if (isDuplicate) return;
+    setActiveTrip((trip) => ({
+      ...trip,
+      pathCoords: [...(trip.pathCoords || []), coord],
+    }));
+  }, [geoLive.position, watching, activeTrip?.startCoord]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function stopTrip() {
     if (!activeTrip || !selectedCarId) return;
     setSaving('trip');
     setError('');
+    clearInterval(timerRef.current);
+    timerRef.current = null;
+    setWatching(false);
     const endedAt = new Date();
     const position = await getCurrentPositionSafe();
-    const endPosition = position
-      ? { lat: position.coords.latitude, lng: position.coords.longitude }
+    const endCoord = position
+      ? [position.coords.longitude, position.coords.latitude]
       : null;
+
+    // Build full path: start + breadcrumbs + end
+    const fullPath = [
+      ...(activeTrip.startCoord ? [activeTrip.startCoord] : []),
+      ...(activeTrip.pathCoords || []),
+      ...(endCoord ? [endCoord] : []),
+    ];
+    const distanceKm = fullPath.length >= 2
+      ? sumPathDistanceKm(fullPath).toFixed(2)
+      : 0;
+
     const durationMinutes = Math.max(1, Math.round((endedAt - activeTrip.startedAt) / 60000));
-    const distanceKm = activeTrip.startPosition && endPosition
-      ? haversineKm(activeTrip.startPosition, endPosition).toFixed(2)
-      : tripForm.distance_km;
 
     try {
       await createTripLog({
@@ -279,11 +354,12 @@ function DriverServicesPage() {
         ended_at: endedAt.toISOString(),
         start_location: activeTrip.startLocation || tripForm.start_location,
         end_location: position ? locationLabel(position) : tripForm.end_location,
-        distance_km: distanceKm || 0,
+        distance_km: Number(distanceKm),
         duration_minutes: durationMinutes,
         notes: tripForm.notes,
       });
       setActiveTrip(null);
+      setElapsedSeconds(0);
       setTripForm(emptyTrip);
       loadServiceData(selectedCarId);
     } catch (err) {
@@ -304,11 +380,14 @@ function DriverServicesPage() {
         car: selectedCarId,
         started_at: startedAt.toISOString(),
         ended_at: endedAt.toISOString(),
-        ...tripForm,
+        start_location: tripForm.start_location,
+        end_location: tripForm.end_location,
         distance_km: Number(tripForm.distance_km),
         duration_minutes: Number(tripForm.duration_minutes),
+        notes: tripForm.notes,
       });
       setTripForm(emptyTrip);
+      setFocusedField(null);
       loadServiceData(selectedCarId);
     } catch (err) {
       setError(Object.values(err || {}).flat().join(' ') || 'Could not save trip.');
@@ -316,6 +395,84 @@ function DriverServicesPage() {
       setSaving('');
     }
   }
+
+  /* ── Geolocation helpers for manual trip ── */
+  async function useCurrentLocation(field) {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser.');
+      return;
+    }
+    setFocusedField(field);
+    setError('');
+    const position = await getCurrentPositionSafe();
+    if (!position) {
+      setError('Unable to get your location. Please check permissions.');
+      return;
+    }
+    const coord = [position.coords.longitude, position.coords.latitude];
+    const label = locationLabel(position);
+    if (field === 'start') {
+      setTripForm((f) => ({ ...f, start_coord: coord, start_location: label }));
+    } else {
+      setTripForm((f) => ({ ...f, end_coord: coord, end_location: label }));
+    }
+  }
+
+  /** Handle map click in manual mode — set the focused field's coord */
+  function handleMapClick(lng, lat) {
+    const coord = [lng, lat];
+    const label = coordToLabel(coord);
+    if (focusedField === 'start' || !focusedField) {
+      setTripForm((f) => ({ ...f, start_coord: coord, start_location: label }));
+    } else {
+      setTripForm((f) => ({ ...f, end_coord: coord, end_location: label }));
+    }
+  }
+
+  /** Auto-calculate distance & duration when both coords are set */
+  const autoDistance = useMemo(() => {
+    if (tripForm.start_coord && tripForm.end_coord) {
+      return haversineKm(tripForm.start_coord, tripForm.end_coord).toFixed(1);
+    }
+    return '';
+  }, [tripForm.start_coord, tripForm.end_coord]);
+
+  const autoDuration = useMemo(() => {
+    if (autoDistance) {
+      // Assume ~40 km/h average for time estimate
+      return Math.max(1, Math.round((Number(autoDistance) / 40) * 60)).toString();
+    }
+    return '';
+  }, [autoDistance]);
+
+  // Auto-fill distance/duration only if user hasn't manually overridden
+  useEffect(() => {
+    if (autoDistance) {
+      setTripForm((f) => ({
+        ...f,
+        distance_km: f.distance_km || autoDistance,
+        duration_minutes: f.duration_minutes || autoDuration,
+      }));
+    }
+  }, [autoDistance, autoDuration]);
+
+  /* ── Live trip helpers ── */
+  const liveDuration = useMemo(() => {
+    const h = Math.floor(elapsedSeconds / 3600);
+    const m = Math.floor((elapsedSeconds % 3600) / 60);
+    const s = elapsedSeconds % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  }, [elapsedSeconds]);
+
+  const livePathDistance = useMemo(() => {
+    if (!activeTrip) return '0.00';
+    const coords = [
+      ...(activeTrip.startCoord ? [activeTrip.startCoord] : []),
+      ...(activeTrip.pathCoords || []),
+    ];
+    return sumPathDistanceKm(coords).toFixed(2);
+  }, [activeTrip]);
 
   /* ── Fuel actions ── */
   async function addFuelFill(e) {
@@ -473,7 +630,7 @@ function DriverServicesPage() {
 
           {/* ── TAB CONTENT ── */}
           {activeTab && (
-            <div className="service-panel service-panel-wide">
+            <div className={`service-panel service-panel-wide${activeTab === 'trips' ? ' trip-full-width' : ''}`}>
               {loading ? (
                 <div className="empty-state">
                   <div className="spinner" />
@@ -491,87 +648,208 @@ function DriverServicesPage() {
                         <div className="service-hero-actions">
                           {!activeTrip ? (
                             <button className="btn btn-primary btn-sm" onClick={startTrip}>
-                              <MapPin size={16} />
+                              <Navigation size={16} />
                               Live Trip
                             </button>
                           ) : (
                             <button className="btn btn-danger btn-sm" onClick={stopTrip} disabled={saving === 'trip'}>
-                              <Clock size={16} />
+                              <MapPin size={16} />
                               {saving === 'trip' ? 'Saving...' : 'End Trip'}
                             </button>
                           )}
                         </div>
                       </div>
 
-                      <HelpBox>{HELP_TEXT.trips}</HelpBox>
-
+                      {/* ── LIVE TRIP (split: map + controls) ── */}
                       {activeTrip && (
-                        <div className="active-trip-strip">
-                          <MapPin size={17} />
-                          <div>
-                            <strong>Trip in progress</strong>
-                            <span>Started {toLocalDateTimeInput(activeTrip.startedAt).replace('T', ' ')}</span>
+                        <div className="trip-split">
+                          <div className="trip-split-map">
+                            <TripMap
+                              startCoord={activeTrip.startCoord}
+                              pathCoords={activeTrip.pathCoords || []}
+                              autoLocate
+                              overlay={
+                                <div className="trip-map-overlay">
+                                  <Route size={15} />
+                                  {livePathDistance} km
+                                </div>
+                              }
+                              height="440px"
+                            />
+                          </div>
+
+                          <div className="trip-split-form">
+                            <div className="active-trip-strip">
+                              <Navigation size={17} />
+                              <div>
+                                <strong>Trip in progress</strong>
+                                <span>Started {toLocalDateTimeInput(activeTrip.startedAt).replace('T', ' ')}</span>
+                              </div>
+                            </div>
+
+                            <div className="trip-live-stats">
+                              <div className="trip-live-stat">
+                                <div className="value timer">{liveDuration}</div>
+                                <div className="label">Duration</div>
+                              </div>
+                              <div className="trip-live-stat">
+                                <div className="value">{livePathDistance}</div>
+                                <div className="label">Distance (km)</div>
+                              </div>
+                              <div className="trip-live-stat">
+                                <div className="value">
+                                  {elapsedSeconds > 0 && Number(livePathDistance) > 0
+                                    ? (Number(livePathDistance) / (elapsedSeconds / 3600)).toFixed(1)
+                                    : '0'}
+                                </div>
+                                <div className="label">Avg Speed (km/h)</div>
+                              </div>
+                              <div className="trip-live-stat">
+                                <div className="value" style={{ fontSize: '0.85rem' }}>
+                                  {activeTrip.startCoord
+                                    ? coordToLabel(activeTrip.startCoord)
+                                    : '—'}
+                                </div>
+                                <div className="label">Start</div>
+                              </div>
+                            </div>
+
+                            <FieldRow label="Notes (optional)">
+                              <input
+                                className="form-input"
+                                placeholder="e.g. Traffic, weather, purpose"
+                                value={tripForm.notes}
+                                onChange={(e) => setTripForm({ ...tripForm, notes: e.target.value })}
+                              />
+                            </FieldRow>
+
+                            <button
+                              className="btn btn-danger"
+                              onClick={stopTrip}
+                              disabled={saving === 'trip'}
+                              style={{ marginTop: 'auto' }}
+                            >
+                              <MapPin size={16} />
+                              {saving === 'trip' ? 'Saving...' : 'End & Save Trip'}
+                            </button>
                           </div>
                         </div>
                       )}
 
-                      <form onSubmit={addManualTrip} className="service-form compact">
-                        <div className="form-row">
-                          <FieldRow label="Distance travelled">
-                            <FieldWithUnit
-                              placeholder="0.0"
-                              unit="km"
-                              value={tripForm.distance_km}
-                              onChange={(e) => setTripForm({ ...tripForm, distance_km: e.target.value })}
-                              step="0.1"
-                              min="0"
-                              required
-                            />
-                          </FieldRow>
-                          <FieldRow label="Duration">
-                            <FieldWithUnit
-                              placeholder="0"
-                              unit="min"
-                              value={tripForm.duration_minutes}
-                              onChange={(e) => setTripForm({ ...tripForm, duration_minutes: e.target.value })}
-                              min="1"
-                              required
-                            />
-                          </FieldRow>
-                        </div>
-                        <div className="form-row">
-                          <FieldRow label="Start location">
-                            <input
-                              className="form-input"
-                              placeholder="City or address"
-                              value={tripForm.start_location}
-                              onChange={(e) => setTripForm({ ...tripForm, start_location: e.target.value })}
-                            />
-                          </FieldRow>
-                          <FieldRow label="End location">
-                            <input
-                              className="form-input"
-                              placeholder="City or address"
-                              value={tripForm.end_location}
-                              onChange={(e) => setTripForm({ ...tripForm, end_location: e.target.value })}
-                            />
-                          </FieldRow>
-                        </div>
-                        <FieldRow label="Notes (optional)">
-                          <input
-                            className="form-input"
-                            placeholder="e.g. Traffic, weather, purpose"
-                            value={tripForm.notes}
-                            onChange={(e) => setTripForm({ ...tripForm, notes: e.target.value })}
-                          />
-                        </FieldRow>
-                        <div>
-                          <button className="btn btn-secondary btn-sm" disabled={saving === 'manual-trip'}>
-                            <Plus size={16} />
-                            {saving === 'manual-trip' ? 'Saving...' : 'Add Manual Trip'}
-                          </button>
-                        </div>
-                      </form>
+                      {/* ── MANUAL TRIP (split: form + map) ── */}
+                      {!activeTrip && (
+                        <>
+                          <HelpBox>{HELP_TEXT.trips}</HelpBox>
+
+                          <form onSubmit={addManualTrip} className="trip-split">
+                            <div className="trip-split-form">
+                              <div className="form-row">
+                                <FieldRow label="Start Location">
+                                  <div className={`location-field-group ${focusedField === 'start' ? 'focused' : ''}`}>
+                                    <input
+                                      className="form-input"
+                                      placeholder="Click map or use button"
+                                      value={tripForm.start_location}
+                                      onChange={(e) => setTripForm({ ...tripForm, start_location: e.target.value })}
+                                      onFocus={() => setFocusedField('start')}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-sm btn-current"
+                                      onClick={() => useCurrentLocation('start')}
+                                      title="Use your current GPS location"
+                                    >
+                                      <Crosshair size={15} />
+                                    </button>
+                                  </div>
+                                </FieldRow>
+                                <FieldRow label="End Location">
+                                  <div className={`location-field-group ${focusedField === 'end' ? 'focused' : ''}`}>
+                                    <input
+                                      className="form-input"
+                                      placeholder="Click map or use button"
+                                      value={tripForm.end_location}
+                                      onChange={(e) => setTripForm({ ...tripForm, end_location: e.target.value })}
+                                      onFocus={() => setFocusedField('end')}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-sm btn-current"
+                                      onClick={() => useCurrentLocation('end')}
+                                      title="Use your current GPS location"
+                                    >
+                                      <Crosshair size={15} />
+                                    </button>
+                                  </div>
+                                </FieldRow>
+                              </div>
+
+                              <div className="form-row">
+                                <FieldRow label="Distance travelled">
+                                  <div className="field-auto">
+                                    <FieldWithUnit
+                                      placeholder="0.0"
+                                      unit="km"
+                                      value={tripForm.distance_km}
+                                      onChange={(e) => setTripForm({ ...tripForm, distance_km: e.target.value })}
+                                      step="0.1"
+                                      min="0"
+                                      required
+                                    />
+                                    {autoDistance && <span className="field-auto-badge">Auto</span>}
+                                  </div>
+                                </FieldRow>
+                                <FieldRow label="Estimated duration">
+                                  <div className="field-auto">
+                                    <FieldWithUnit
+                                      placeholder="0"
+                                      unit="min"
+                                      value={tripForm.duration_minutes}
+                                      onChange={(e) => setTripForm({ ...tripForm, duration_minutes: e.target.value })}
+                                      min="1"
+                                      required
+                                    />
+                                    {autoDuration && <span className="field-auto-badge">Auto</span>}
+                                  </div>
+                                </FieldRow>
+                              </div>
+
+                              <FieldRow label="Notes (optional)">
+                                <input
+                                  className="form-input"
+                                  placeholder="e.g. Traffic, weather, purpose"
+                                  value={tripForm.notes}
+                                  onChange={(e) => setTripForm({ ...tripForm, notes: e.target.value })}
+                                />
+                              </FieldRow>
+
+                              <button className="btn btn-primary" disabled={saving === 'manual-trip'}>
+                                <Plus size={16} />
+                                {saving === 'manual-trip' ? 'Saving...' : 'Add Manual Trip'}
+                              </button>
+                            </div>
+
+                            <div className="trip-split-map">
+                              <TripMap
+                                startCoord={tripForm.start_coord}
+                                endCoord={tripForm.end_coord}
+                                interactive
+                                autoLocate
+                                onMapClick={handleMapClick}
+                                height="440px"
+                                overlay={
+                                  (tripForm.start_coord || tripForm.end_coord) ? (
+                                    <div className="trip-map-overlay">
+                                      <Route size={15} />
+                                      {tripForm.distance_km || '0'} km
+                                    </div>
+                                  ) : null
+                                }
+                              />
+                            </div>
+                          </form>
+                        </>
+                      )}
 
                       {trips.length > 0 && (
                         <div className="service-list">
@@ -590,8 +868,8 @@ function DriverServicesPage() {
                           ))}
                         </div>
                       )}
-                      {trips.length === 0 && (
-                        <p className="service-empty-line">No trips yet. Add a manual trip or start a live trip above.</p>
+                      {trips.length === 0 && !activeTrip && (
+                        <p className="service-empty-line">No trips yet. Start a live trip or use the manual form above.</p>
                       )}
                     </>
                   )}
